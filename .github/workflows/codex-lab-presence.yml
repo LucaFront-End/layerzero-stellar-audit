@@ -11,6 +11,9 @@ jobs:
   canary:
     runs-on: ubuntu-latest
     steps:
+      - name: Emit unique definition marker
+        shell: bash
+        run: echo "LAB_SYNC_MARKER=brave-sync-e2e-20261110"
       - name: Report presence only
         shell: bash
         env:
