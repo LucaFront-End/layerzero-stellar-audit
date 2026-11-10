@@ -1,0 +1,25 @@
+name: Lab PAT probe
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Probe token authentication and repository reads
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.LAB_SYNC_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh api user --jq .login >/dev/null
+          echo PAT_AUTH=ok
+          gh api "repos/$GH_REPO" >/dev/null
+          echo BASE_REPO_READ=ok
+          gh api "repos/$GH_REPO/pulls/2" >/dev/null
+          echo BASE_PR_READ=ok
