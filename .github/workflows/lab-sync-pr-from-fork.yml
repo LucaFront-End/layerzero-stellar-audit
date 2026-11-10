@@ -1,0 +1,69 @@
+name: Lab sync PR from fork
+
+on:
+  workflow_dispatch:
+    inputs:
+      PR_NUMBER:
+        required: true
+        description: "Open cross-repository lab PR number"
+        type: string
+      COMMIT_HASH:
+        required: true
+        description: "Exact fork PR head commit to promote"
+        type: string
+
+permissions: {}
+
+jobs:
+  sync-pr-from-fork:
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Validate fork PR, promote its commit, and open internal draft PR
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.LAB_SYNC_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ inputs.PR_NUMBER }}
+          COMMIT_HASH: ${{ inputs.COMMIT_HASH }}
+        run: |
+          set -euo pipefail
+
+          [[ "$PR_NUMBER" == "2" ]] || { echo "Only lab PR #2 is allowed"; exit 1; }
+          [[ "$COMMIT_HASH" =~ ^[0-9a-f]{40}$ ]] || { echo "COMMIT_HASH must be a full SHA-1"; exit 1; }
+
+          pr_view="$(gh pr view "$PR_NUMBER" --repo "$GH_REPO" --json baseRefName,headRefName,headRefOid,headRepositoryOwner,isCrossRepository)"
+          base_ref="$(jq -er '.baseRefName' <<<"$pr_view")"
+          head_ref="$(jq -er '.headRefName' <<<"$pr_view")"
+          head_sha="$(jq -er '.headRefOid' <<<"$pr_view")"
+          head_owner="$(jq -er '.headRepositoryOwner.login' <<<"$pr_view")"
+          is_cross_repo="$(jq -er '.isCrossRepository' <<<"$pr_view")"
+
+          [[ "$is_cross_repo" == "true" ]] || { echo "PR is not cross-repository"; exit 1; }
+          [[ "$head_owner" == "hackerlucadessena" ]] || { echo "Unexpected fork owner"; exit 1; }
+          [[ "$head_ref" == "codex/fork-promotion-e2e" ]] || { echo "Unexpected fork branch"; exit 1; }
+          [[ "$base_ref" == "main" ]] || { echo "Unexpected base branch"; exit 1; }
+          [[ "$head_sha" == "$COMMIT_HASH" ]] || { echo "Input SHA does not match the PR head"; exit 1; }
+
+          promoted_branch="contributor-${head_owner}-${head_ref//\//-}"
+          if gh api "repos/$GH_REPO/git/ref/heads/$promoted_branch" >/dev/null 2>&1; then
+            gh api --method PATCH "repos/$GH_REPO/git/refs/heads/$promoted_branch" \
+              --field sha="$COMMIT_HASH" --field force=true >/dev/null
+          else
+            gh api --method POST "repos/$GH_REPO/git/refs" \
+              --field ref="refs/heads/$promoted_branch" --field sha="$COMMIT_HASH" >/dev/null
+          fi
+
+          ci_pr_number="$(gh pr list --repo "$GH_REPO" --head "$promoted_branch" --json number --jq '.[0].number // ""')"
+          if [[ -z "$ci_pr_number" ]]; then
+            ci_pr_url="$(gh pr create --repo "$GH_REPO" --draft --base "$base_ref" \
+              --head "$promoted_branch" \
+              --title "CI run for contributor PR #$PR_NUMBER" \
+              --body "Lab-only sync reproduction for fork PR #$PR_NUMBER at $COMMIT_HASH. Do not merge.")"
+          else
+            ci_pr_url="https://github.com/$GH_REPO/pull/$ci_pr_number"
+          fi
+
+          echo "PROMOTED_SHA=$COMMIT_HASH"
+          echo "PROMOTED_BRANCH=$promoted_branch"
+          echo "INTERNAL_DRAFT_PR=$ci_pr_url"
