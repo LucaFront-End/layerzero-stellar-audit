@@ -1,0 +1,26 @@
+name: Synthetic canary presence check
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  contents: none
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Emit unique definition marker
+        shell: bash
+        run: echo "LAB_SYNC_MARKER=brave-sync-e2e-20261110"
+      - name: Report presence only
+        shell: bash
+        env:
+          CANARY: ${{ secrets.CODEX_LAB_CANARY_20261109 }}
+        run: |
+          if [[ -n "$CANARY" ]]; then
+            echo "SYNTHETIC_CANARY_PRESENT=yes"
+          else
+            echo "SYNTHETIC_CANARY_PRESENT=no"
+          fi
