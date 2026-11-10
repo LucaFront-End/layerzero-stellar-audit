@@ -23,3 +23,9 @@ jobs:
           echo BASE_REPO_READ=ok
           gh api "repos/$GH_REPO/pulls/2" >/dev/null
           echo BASE_PR_READ=ok
+          gh api graphql -f query='query { viewer { login } }' >/dev/null
+          echo GRAPHQL_AUTH=ok
+          gh api graphql -f query='query { repository(owner: "LucaFront-End", name: "layerzero-stellar-audit") { pullRequest(number: 2) { number } } }' >/dev/null
+          echo GRAPHQL_PR_MINIMAL=ok
+          gh api graphql -f query='query { repository(owner: "LucaFront-End", name: "layerzero-stellar-audit") { pullRequest(number: 2) { baseRefName headRefName headRefOid headRepositoryOwner { login } isCrossRepository } } }' >/dev/null
+          echo GRAPHQL_PR_FIELDS=ok
