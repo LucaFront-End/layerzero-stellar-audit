@@ -1,0 +1,35 @@
+name: Codex isolated Actions canary
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  canary:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      LAB_CANARY: ${{ secrets.CODEX_LAB_CANARY_20261109 }}
+    steps:
+      - name: Compare the test secret without revealing its value
+        env:
+          EXPECTED_CANARY: CODEX_LAB_DUMMY_20261109_7f34c6
+        run: |
+          if [ "$LAB_CANARY" = "$EXPECTED_CANARY" ]; then
+            result=match
+          elif [ -z "$LAB_CANARY" ]; then
+            result=missing
+          else
+            result=mismatch
+          fi
+          gh pr comment "$PR_NUMBER" -R "$GITHUB_REPOSITORY" -b "LAB_CANARY=$result"
+          if [ "$result" != match ]; then
+            echo "::error::Synthetic Actions canary did not match"
+            exit 1
+          fi
+          echo "Synthetic canary matched; value was not printed."
